@@ -1,19 +1,23 @@
 package lab5;
 
 import akka.NotUsed;
+import akka.actor.ActorRef;
 import akka.actor.ActorSystem;
+import akka.actor.Props;
 import akka.http.javadsl.ConnectHttp;
 import akka.http.javadsl.Http;
 import akka.http.javadsl.ServerBinding;
 import akka.http.javadsl.model.HttpRequest;
 import akka.http.javadsl.model.HttpResponse;
 import akka.japi.Pair;
+import akka.pattern.Patterns;
 import akka.stream.ActorMaterializer;
 import akka.stream.javadsl.Flow;
 import akka.stream.javadsl.Keep;
 import akka.stream.javadsl.Sink;
 import akka.stream.javadsl.Source;
 import akka.util.ByteString;
+import scala.concurrent.Future;
 
 import java.io.IOException;
 import java.util.Collections;
@@ -43,6 +47,11 @@ public class Server {
                                         System.out.println("testURL = " + testURL);
                                         System.out.println("count = " + countInteger);
                                         Pair<String, Integer> input = new Pair<>(testURL, countInteger);
+
+                                        ActorRef cacheActor = system.actorOf(Props.create(CacheActor.class));
+                                        Future<Object> result = Patterns.ask(cacheActor,
+                                                new GetMessage(testURL, countInteger), 5000);
+
                                         Source<Pair<String, Integer>, NotUsed> source = Source.from(Collections.singletonList(input));
                                         /*б. Общая логика требуемого flow*/
                                         Flow<Pair<String, Integer>, HttpResponse, NotUsed> flow = Flow.<Pair<String, Integer>>create()
