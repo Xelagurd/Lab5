@@ -17,11 +17,16 @@ import akka.stream.javadsl.Keep;
 import akka.stream.javadsl.Sink;
 import akka.stream.javadsl.Source;
 import akka.util.ByteString;
+import scala.concurrent.Await;
 import scala.concurrent.Future;
+import scala.concurrent.duration.Duration;
+import scala.util.Try;
 
 import java.io.IOException;
 import java.util.Collections;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.TimeUnit;
 
 public class Server {
 
@@ -57,7 +62,33 @@ public class Server {
                                                 .mapAsync(1, pair -> {
                                                     Future<Object> result = Patterns.ask(cacheActor,
                                                             new GetMessage(testURL, countInteger), 5000);
-                                                })
+
+                                                    int answer = (int) Await.result(result, Duration.create(10, TimeUnit.SECONDS));
+                                                    if (answer != -1) {
+                                                        return CompletableFuture.completedFuture(answer);
+                                                    }
+
+                                                    Sink<Pair<Try<HttpResponse>, Long>, CompletionStage<Integer>> fold = Sink.fold(0, (accumulator, element) -> {
+                                                        int responseTime = (int) (System.currentTimeMillis() - element.second());
+                                                        System.out.println("current response time is " + responseTime + " ms");
+                                                        return accumulator + responseTime;
+                                                    });
+
+                                                    return Source.from(Collections.singletonList(pair)).toMat(
+                                                            /*C помощью метода create создаем Flow */
+                                                            Flow.<Pair<HttpRequest, Integer>>create()
+                                                                    /*mapConcat размножаем сообщения до нужного количества копий */
+                                                                    .mapConcat(p -> Collections.nCopies(p.second(), p.first()))
+
+                                                                    .map(request2 -> )
+                                                                    /*в данном случае fold — это аггрегатор который подсчитывает
+                                                                    сумму всех времен, создаем его с помощью Sink.fold() */
+                                                                    .toMat(fold, Keep.right()), Keep.right()).run(materializer);
+
+                                                }).map(sum -> {
+                                                    Double middleValue = (double) sum / (double) countInteger;
+                                                    return HttpResponse.create().withEntity(ByteString.fromString("middle response value is " + middleValue.toString() + " ms"));
+                                                });
 
                                         CompletionStage<HttpResponse> result = source.via(flow).toMat(Sink.last(), Keep.right()).run(materializer);
                                         return result.toCompletableFuture().get();
