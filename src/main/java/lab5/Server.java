@@ -19,11 +19,8 @@ import akka.stream.javadsl.Source;
 import akka.util.ByteString;
 import scala.concurrent.Future;
 
-import static akka.pattern.Patterns.ask;
-
 import java.io.IOException;
 import java.util.Collections;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 
 public class Server {
@@ -33,7 +30,7 @@ public class Server {
         ActorSystem system = ActorSystem.create("JSServerActorSystem");
         final Http http = Http.get(system);
         final ActorMaterializer materializer = ActorMaterializer.create(system);
-
+        ActorRef cacheActor = system.actorOf(Props.create(CacheActor.class));
         CompletionStage<ServerBinding> serverBindingFuture =
                 Http.get(system).bindAndHandleSync(
                         request -> {
@@ -50,11 +47,7 @@ public class Server {
                                         System.out.println("testURL = " + testURL);
                                         System.out.println("count = " + countInteger);
                                         Pair<String, Integer> input = new Pair<>(testURL, countInteger);
-/*
-                                        ActorRef cacheActor = system.actorOf(Props.create(CacheActor.class));
-                                        CompletableFuture<Object> result = ask(cacheActor,
-                                                new GetMessage(testURL, countInteger), 5000);
-                                                */
+
                                         Source<Pair<String, Integer>, NotUsed> source = Source.from(Collections.singletonList(input));
                                         /*б. Общая логика требуемого flow*/
                                         Flow<Pair<String, Integer>, HttpResponse, NotUsed> flow = Flow.<Pair<String, Integer>>create()
