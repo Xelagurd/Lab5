@@ -21,10 +21,10 @@ public class CacheActor extends AbstractActor {
                     if (!storage.containsKey(m.getSite() + "|" + m.getRequestCount())) {
                         storage.put(m.getSite() + "|" + m.getRequestCount(), m.getResult());
                     }
-                    System.out.println("Message for if: " + m.getSite() + "|" + m.getRequestCount() + " received");
+                    System.out.println("Message for site: " + m.getSite() + " with count " + m.getRequestCount() + " received");
                 })
                 .match(GetMessage.class, req -> sender().tell(
-                        new FullAnswer(req.getPackageId(), storage.get(req.getPackageId())), self())
+                        new StoreMessage(req.getSite(), req.getRequestCount(), storage.get(req.getSite() + "|" + req.getRequestCount())), self())
                 ).build();
     }
 }
