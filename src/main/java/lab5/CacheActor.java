@@ -7,11 +7,6 @@ import java.util.HashMap;
 import java.util.Map;
 
 public class CacheActor extends AbstractActor {
-    /*б. В приложении будем использовать следующие акторы :
-    - актор который хранит результаты тестов.
-   Обрабатывает следующие сообщения :
-   cообщение с результатом одного теста -> кладет его в локальное хранилище.
-   Сообщение с запросом результата теста → отвечает сообщением с  результатом всех тестов для заданного  packageId */
     private Map<String, String> storage = new HashMap<>();
 
     @Override
