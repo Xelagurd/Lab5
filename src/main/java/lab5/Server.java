@@ -50,10 +50,11 @@ public class Server {
                                         System.out.println("testURL = " + testURL);
                                         System.out.println("count = " + countInteger);
                                         Pair<String, Integer> input = new Pair<>(testURL, countInteger);
-
+/*
                                         ActorRef cacheActor = system.actorOf(Props.create(CacheActor.class));
                                         CompletableFuture<Object> result = ask(cacheActor,
                                                 new GetMessage(testURL, countInteger), 5000);
+                                                */
                                         Source<Pair<String, Integer>, NotUsed> source = Source.from(Collections.singletonList(input));
                                         /*б. Общая логика требуемого flow*/
                                         Flow<Pair<String, Integer>, HttpResponse, NotUsed> flow = Flow.<Pair<String, Integer>>create()
@@ -61,6 +62,8 @@ public class Server {
                                                 .map(pair -> new Pair<>(HttpRequest.create().withUri(pair.first()), pair.second()))
                                                 /*mapAsync, создаем на лету flow из данных запроса, выполняем его и возвращаем*/
                                                 .mapAsync(1, pair -> {
+                                                    Future<Object> result = Patterns.ask(cacheActor,
+                                                            new GetMessage(testURL, countInteger), 5000);
                                                 })
 
                                         CompletionStage<HttpResponse> result = source.via(flow).toMat(Sink.last(), Keep.right()).run(materializer);
