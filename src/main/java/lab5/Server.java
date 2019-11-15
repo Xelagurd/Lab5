@@ -65,6 +65,7 @@ public class Server {
 
                                                     int answer = (int) Await.result(result, Duration.create(10, TimeUnit.SECONDS));
                                                     if (answer != -1) {
+                                                        System.out.println("Answer from cache: ");
                                                         return CompletableFuture.completedFuture(answer);
                                                     }
 
@@ -80,7 +81,12 @@ public class Server {
                                                                     /*mapConcat размножаем сообщения до нужного количества копий */
                                                                     .mapConcat(p -> Collections.nCopies(p.second(), p.first()))
 
-                                                                    .map(request2 -> )
+                                                                    .mapAsync(1, request2 -> {
+                                                                        CompletableFuture<Long> future = CompletableFuture.supplyAsync(() ->
+                                                                                System.currentTimeMillis()
+                                                                        )
+                                                                        return future;
+                                                                    })
                                                                     /*в данном случае fold — это аггрегатор который подсчитывает
                                                                     сумму всех времен, создаем его с помощью Sink.fold() */
                                                                     .toMat(fold, Keep.right()), Keep.right()).run(materializer);
