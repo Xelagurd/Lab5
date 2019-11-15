@@ -1,21 +1,18 @@
 package lab5;
 
-import akka.actor.*;
+import akka.NotUsed;
+import akka.actor.ActorSystem;
 import akka.http.javadsl.ConnectHttp;
 import akka.http.javadsl.Http;
 import akka.http.javadsl.ServerBinding;
 import akka.http.javadsl.model.HttpRequest;
 import akka.http.javadsl.model.HttpResponse;
-import akka.NotUsed;
-import akka.stream.javadsl.*;
-import akka.util.ByteString;
-import akka.japi.Pair;
-import scala.util.Try;
-import java.io.IOException;
-import java.util.Collections;
-import java.util.concurrent.CompletionStage;
 import akka.stream.ActorMaterializer;
 import akka.stream.javadsl.Flow;
+import akka.util.ByteString;
+
+import java.io.IOException;
+import java.util.concurrent.CompletionStage;
 
 public class Server {
     public static void main(String[] args) throws IOException {
@@ -33,13 +30,17 @@ public class Server {
                 } else if (count.isEmpty()) {
                     return HttpResponse.create().withEntity(ByteString.fromString("count is empty"));
                 } else {
+                    try {
+                    } catch (NumberFormatException e) {
+                        return HttpResponse.create().withEntity(ByteString.fromString("count is not an integer"));
+                    }
                 }
             } else {
                 return HttpResponse.create().withEntity(ByteString.fromString("404"));
             }
         };
 
-        final CompletionStage<ServerBinding> binding = http.bindAndHandle(
+        final CompletionStage<ServerBinding> binding = Http.get(system).bindAndHandle(
                 routeFlow,
                 ConnectHttp.toHost("localhost", 8080),
                 materializer
