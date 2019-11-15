@@ -73,10 +73,11 @@ public class Server {
                                                         return CompletableFuture.completedFuture(answer);
                                                     }
 
-                                                    Sink<Long, CompletionStage<Integer>> fold = Sink.fold(0, (accumulator, element) -> {
-                                                        int responseTime = (int) (element);
-                                                        return accumulator + element;
-                                                    });
+                                                    Sink<Long, CompletionStage<Integer>> fold = Sink.
+                                                            fold(0, (accumulator, element) -> {
+                                                                int responseTime = (int) (element + 0);
+                                                                return accumulator + responseTime;
+                                                            });
 
                                                     return Source.from(Collections.singletonList(pair)).toMat(
                                                             /*C помощью метода create создаем Flow */
