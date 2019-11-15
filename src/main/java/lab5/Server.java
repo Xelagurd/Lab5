@@ -17,16 +17,20 @@ import akka.stream.javadsl.Keep;
 import akka.stream.javadsl.Sink;
 import akka.stream.javadsl.Source;
 import akka.util.ByteString;
+import org.asynchttpclient.ListenableFuture;
+import org.asynchttpclient.Response;
 import scala.concurrent.Await;
 import scala.concurrent.Future;
 import scala.concurrent.duration.Duration;
-import scala.util.Try;
 
 import java.io.IOException;
 import java.util.Collections;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+
+import static org.asynchttpclient.Dsl.asyncHttpClient;
 
 public class Server {
 
@@ -69,10 +73,9 @@ public class Server {
                                                         return CompletableFuture.completedFuture(answer);
                                                     }
 
-                                                    Sink<Pair<Try<HttpResponse>, Long>, CompletionStage<Integer>> fold = Sink.fold(0, (accumulator, element) -> {
-                                                        int responseTime = (int) (System.currentTimeMillis() - element.second());
-                                                        System.out.println("current response time is " + responseTime + " ms");
-                                                        return accumulator + responseTime;
+                                                    Sink<Long, CompletionStage<Integer>> fold = Sink.fold(0, (accumulator, element) -> {
+                                                        int responseTime = (int) (element);
+                                                        return accumulator + element;
                                                     });
 
                                                     return Source.from(Collections.singletonList(pair)).toMat(
@@ -84,7 +87,15 @@ public class Server {
                                                                     .mapAsync(1, request2 -> {
                                                                         CompletableFuture<Long> future = CompletableFuture.supplyAsync(() ->
                                                                                 System.currentTimeMillis()
-                                                                        )
+                                                                        ).thenCompose(s -> CompletableFuture.supplyAsync(() -> {
+                                                                            ListenableFuture<Response> whenResponse = asyncHttpClient().prepareGet(request2.getUri().toString()).execute();
+                                                                            try {
+                                                                                Response response = whenResponse.get();
+                                                                            } catch (InterruptedException | ExecutionException e) {
+                                                                                e.printStackTrace();
+                                                                            }
+                                                                            return System.currentTimeMillis() - s;
+                                                                        }));
                                                                         return future;
                                                                     })
                                                                     /*в данном случае fold — это аггрегатор который подсчитывает
@@ -92,6 +103,7 @@ public class Server {
                                                                     .toMat(fold, Keep.right()), Keep.right()).run(materializer);
 
                                                 }).map(sum -> {
+                                                    Patterns.ask(cacheActor, new StoreMessage(testURL, countInteger, sum.toString()), 5000);
                                                     Double middleValue = (double) sum / (double) countInteger;
                                                     return HttpResponse.create().withEntity(ByteString.fromString("middle response value is " + middleValue.toString() + " ms"));
                                                 });
