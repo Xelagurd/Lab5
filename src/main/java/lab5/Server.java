@@ -7,23 +7,33 @@ import akka.actor.Props;
 import akka.http.javadsl.ConnectHttp;
 import akka.http.javadsl.Http;
 import akka.http.javadsl.ServerBinding;
-import akka.http.javadsl.model.HttpRequest;
-import akka.http.javadsl.model.HttpResponse;
-import akka.japi.Pair;
+import akka.http.javadsl.model.*;
 import akka.pattern.Patterns;
 import akka.stream.ActorMaterializer;
 import akka.stream.javadsl.Flow;
 import akka.stream.javadsl.Keep;
 import akka.stream.javadsl.Sink;
 import akka.stream.javadsl.Source;
+import akka.japi.Pair;
 import akka.util.ByteString;
+import akka.util.Timeout;
+import org.asynchttpclient.Response;
+import scala.concurrent.Await;
+import scala.concurrent.Future;
+import org.asynchttpclient.*;
+
+import static org.asynchttpclient.Dsl.asyncHttpClient;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.util.Collections;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
 
-import static org.asynchttpclient.Dsl.asyncHttpClient;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class Server {
 
@@ -72,7 +82,8 @@ public class Server {
                                         .mapAsync(1, pair -> {
 
                                             return Patterns.ask(cacheActor,
-                                                    new GetMessage(input.first(), input.second()), REQUEST_ACTOR_TIMEOUT).thenCompose(answer -> {
+                                                    new GetMessage(input.first(), input.second()),
+                                                    REQUEST_ACTOR_TIMEOUT).then(answer -> {
 
                                                 if ((int) answer != NO_ANSWER_MSG) {
                                                     System.out.println("Answer will get from cache");
