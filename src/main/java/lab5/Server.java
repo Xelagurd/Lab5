@@ -7,33 +7,23 @@ import akka.actor.Props;
 import akka.http.javadsl.ConnectHttp;
 import akka.http.javadsl.Http;
 import akka.http.javadsl.ServerBinding;
-import akka.http.javadsl.model.*;
+import akka.http.javadsl.model.HttpRequest;
+import akka.http.javadsl.model.HttpResponse;
+import akka.japi.Pair;
 import akka.pattern.Patterns;
 import akka.stream.ActorMaterializer;
 import akka.stream.javadsl.Flow;
 import akka.stream.javadsl.Keep;
 import akka.stream.javadsl.Sink;
 import akka.stream.javadsl.Source;
-import akka.japi.Pair;
 import akka.util.ByteString;
-import akka.util.Timeout;
-import org.asynchttpclient.Response;
-import scala.concurrent.Await;
-import scala.concurrent.Future;
-import org.asynchttpclient.*;
-
-import static org.asynchttpclient.Dsl.asyncHttpClient;
 
 import java.io.IOException;
-import java.time.Duration;
 import java.util.Collections;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import static org.asynchttpclient.Dsl.asyncHttpClient;
 
 public class Server {
 
@@ -82,51 +72,49 @@ public class Server {
                                         .mapAsync(1, pair -> {
 
                                             return Patterns.ask(cacheActor,
-                                                    new GetMessage(input.first(), input.second()), REQUEST_ACTOR_TIMEOUT).thenCompose(r->{
+                                                    new GetMessage(input.first(), input.second()), REQUEST_ACTOR_TIMEOUT).thenCompose(answer -> {
 
-                                            int answer = (int) Await.result(result, Duration.create(10, TimeUnit.SECONDS));
-                                            if (answer != NO_ANSWER_MSG) {
-                                                System.out.println("Answer will get from cache");
-                                                return CompletableFuture.completedFuture(answer);
-                                            }
+                                                if ((int) answer != NO_ANSWER_MSG) {
+                                                    System.out.println("Answer will get from cache");
+                                                    return CompletableFuture.completedFuture((int) answer);
+                                                }
 
-                                            Sink<Long, CompletionStage<Integer>> fold = Sink.
-                                                    fold(0, (accumulator, element) -> {
-                                                        int responseTime = (int) (element + 0);
-                                                        return accumulator + responseTime;
-                                                    });
+                                                Sink<CompletionStage<Long>, CompletionStage<Integer>> fold = Sink.
+                                                        fold(0, (accumulator, element) -> {
+                                                            int responseTime = (int) (element.toCompletableFuture().get() + 0);
+                                                            return accumulator + responseTime;
+                                                        });
 
-                                            return Source.from(Collections.singletonList(pair)).toMat(
-                                                    /*C помощью метода create создаем Flow */
-                                                    Flow.<Pair<HttpRequest, Integer>>create()
-                                                            /*mapConcat размножаем сообщения до нужного количества копий */
-                                                            .mapConcat(p -> Collections.nCopies(p.second(), p.first()))
+                                                return Source.from(Collections.singletonList(pair)).toMat(
+                                                        /*C помощью метода create создаем Flow */
+                                                        Flow.<Pair<HttpRequest, Integer>>create()
+                                                                /*mapConcat размножаем сообщения до нужного количества копий */
+                                                                .mapConcat(p -> Collections.nCopies(p.second(), p.first()))
 
-                                                            .mapAsync(1, request2 -> {
-                                                                CompletableFuture<Long> future = CompletableFuture.supplyAsync(() ->
-                                                                        System.currentTimeMillis()
-                                                                ).thenCompose(s -> CompletableFuture.supplyAsync(() -> {
-                                                                    ListenableFuture<Response> whenResponse = asyncHttpClient().prepareGet(request2.getUri().toString()).execute();
-                                                                    try {
-                                                                        Response response = whenResponse.get();
-                                                                    } catch (InterruptedException | ExecutionException e) {
-                                                                        e.printStackTrace();
-                                                                    }
-                                                                    return System.currentTimeMillis() - s;
-                                                                }));
-                                                                return future;
-                                                            })
-                                                            /*в данном случае fold — это аггрегатор который подсчитывает
-                                                            сумму всех времен, создаем его с помощью Sink.fold() */
-                                                            .toMat(fold, Keep.right()), Keep.right()).run(materializer);
+                                                                .mapAsync(1, request2 -> {
+                                                                    return CompletableFuture.supplyAsync(() ->
+                                                                            System.currentTimeMillis()
+                                                                    ).thenCompose(start -> CompletableFuture.supplyAsync(() -> {
+                                                                        CompletionStage<Long> whenResponse = asyncHttpClient()
+                                                                                .prepareGet(req2.getUri().toString())
+                                                                                .execute()
+                                                                                .toCompletableFuture()
+                                                                                .thenCompose(answer ->
+                                                                                        CompletableFuture.completedFuture(System.currentTimeMillis() - start));
+                                                                        return whenResponse;
+                                                                    }));
+                                                                })
+                                                                /*в данном случае fold — это аггрегатор который подсчитывает
+                                                                сумму всех времен, создаем его с помощью Sink.fold() */
+                                                                .toMat(fold, Keep.right()), Keep.right()).run(materializer);
 
-                                        }).map(sum -> {
-                                            Patterns.ask(cacheActor, new StoreMessage(testURL, countInteger, sum.toString()), REQUEST_ACTOR_TIMEOUT);
-                                            Double middleValue = (double) sum / (double) countInteger;
-                                            System.out.println("Middle response value is " + middleValue.toString() + " ms");
-                                            return HttpResponse.create().withEntity(ByteString.fromString("middle response value is " + middleValue.toString() + " ms"));
+                                            }).map(sum -> {
+                                                Patterns.ask(cacheActor, new StoreMessage(testURL, countInteger, sum.toString()), REQUEST_ACTOR_TIMEOUT);
+                                                Double middleValue = (double) sum / (double) countInteger;
+                                                System.out.println("Middle response value is " + middleValue.toString() + " ms");
+                                                return HttpResponse.create().withEntity(ByteString.fromString("middle response value is " + middleValue.toString() + " ms"));
+                                            });
                                         });
-                            });
                                 CompletionStage<HttpResponse> result = source.via(flow).toMat(Sink.last(), Keep.right()).run(materializer);
                                 return result.toCompletableFuture().get();
                             } catch (NumberFormatException e) {
