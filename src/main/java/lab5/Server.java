@@ -96,10 +96,10 @@ public class Server {
                                                                             System.currentTimeMillis()
                                                                     ).thenCompose(start -> CompletableFuture.supplyAsync(() -> {
                                                                         CompletionStage<Long> whenResponse = asyncHttpClient()
-                                                                                .prepareGet(req2.getUri().toString())
+                                                                                .prepareGet(request2.getUri().toString())
                                                                                 .execute()
                                                                                 .toCompletableFuture()
-                                                                                .thenCompose(answer ->
+                                                                                .thenCompose(answer2 ->
                                                                                         CompletableFuture.completedFuture(System.currentTimeMillis() - start));
                                                                         return whenResponse;
                                                                     }));
@@ -108,8 +108,8 @@ public class Server {
                                                                 сумму всех времен, создаем его с помощью Sink.fold() */
                                                                 .toMat(fold, Keep.right()), Keep.right()).run(materializer);
 
-                                            }).map(sum -> {
-                                                Patterns.ask(cacheActor, new StoreMessage(testURL, countInteger, sum.toString()), REQUEST_ACTOR_TIMEOUT);
+                                            }).thenCompose(sum -> {
+                                                Patterns.ask(cacheActor, new StoreMessage(testURL, countInteger, sum), REQUEST_ACTOR_TIMEOUT);
                                                 Double middleValue = (double) sum / (double) countInteger;
                                                 System.out.println("Middle response value is " + middleValue.toString() + " ms");
                                                 return HttpResponse.create().withEntity(ByteString.fromString("middle response value is " + middleValue.toString() + " ms"));
