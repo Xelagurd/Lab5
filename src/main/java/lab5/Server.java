@@ -7,30 +7,33 @@ import akka.actor.Props;
 import akka.http.javadsl.ConnectHttp;
 import akka.http.javadsl.Http;
 import akka.http.javadsl.ServerBinding;
-import akka.http.javadsl.model.HttpRequest;
-import akka.http.javadsl.model.HttpResponse;
-import akka.japi.Pair;
+import akka.http.javadsl.model.*;
 import akka.pattern.Patterns;
 import akka.stream.ActorMaterializer;
 import akka.stream.javadsl.Flow;
 import akka.stream.javadsl.Keep;
 import akka.stream.javadsl.Sink;
 import akka.stream.javadsl.Source;
+import akka.japi.Pair;
 import akka.util.ByteString;
-import org.asynchttpclient.ListenableFuture;
+import akka.util.Timeout;
 import org.asynchttpclient.Response;
 import scala.concurrent.Await;
 import scala.concurrent.Future;
-import scala.concurrent.duration.Duration;
+import org.asynchttpclient.*;
+
+import static org.asynchttpclient.Dsl.asyncHttpClient;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.util.Collections;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
-import static org.asynchttpclient.Dsl.asyncHttpClient;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class Server {
 
@@ -78,8 +81,8 @@ public class Server {
                                         /*mapAsync, создаем на лету flow из данных запроса, выполняем его и возвращаем*/
                                         .mapAsync(1, pair -> {
 
-                                            Future<Object> result = Patterns.ask(cacheActor,
-                                                    new GetMessage(testURL, countInteger), REQUEST_ACTOR_TIMEOUT);
+                                            return Patterns.ask(cacheActor,
+                                                    new GetMessage(input.first(), input.second()), REQUEST_ACTOR_TIMEOUT).thenCompose(r->{
 
                                             int answer = (int) Await.result(result, Duration.create(10, TimeUnit.SECONDS));
                                             if (answer != NO_ANSWER_MSG) {
@@ -123,7 +126,7 @@ public class Server {
                                             System.out.println("Middle response value is " + middleValue.toString() + " ms");
                                             return HttpResponse.create().withEntity(ByteString.fromString("middle response value is " + middleValue.toString() + " ms"));
                                         });
-
+                            });
                                 CompletionStage<HttpResponse> result = source.via(flow).toMat(Sink.last(), Keep.right()).run(materializer);
                                 return result.toCompletableFuture().get();
                             } catch (NumberFormatException e) {
