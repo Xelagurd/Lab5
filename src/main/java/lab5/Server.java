@@ -34,22 +34,34 @@ import static org.asynchttpclient.Dsl.asyncHttpClient;
 
 public class Server {
 
+    private static final String ACTOR_SYSTEM_NAME = "JSServerActorSystem";
+    private static final String BASE_URI = "/";
+    private static final String TEST_URL = "testURL";
+    private static final String COUNT = "count";
+    private static final String EMPTY_STRING = "";
+    private static final String EMPTY_TEST_URL = "testURL is empty";
+    private static final String EMPTY_COUNT = "count is empty";
+    private static final int REQUEST_ACTOR_TIMEOUT = 5000;
+    private static final String ERROR_404 = "404";
+    private static final String HOST = "localhost";
+    private static final int PORT = 8083;
+    private static final int NO_ANSWER_MSG = -1;
+
     public static void main(String[] args) throws IOException {
         /*а. Инициализация http сервера в akka */
-        ActorSystem system = ActorSystem.create("JSServerActorSystem");
-        final Http http = Http.get(system);
+        ActorSystem system = ActorSystem.create(ACTOR_SYSTEM_NAME);
         final ActorMaterializer materializer = ActorMaterializer.create(system);
         ActorRef cacheActor = system.actorOf(Props.create(CacheActor.class));
-        CompletionStage<ServerBinding> serverBindingFuture =
+        final CompletionStage<ServerBinding> serverBindingFuture =
                 Http.get(system).bindAndHandleSync(
                         request -> {
-                            if (request.getUri().path().equals("/")) {
-                                String testURL = request.getUri().query().get("testURL").orElse("");
-                                String count = request.getUri().query().get("count").orElse("");
+                            if (request.getUri().path().equals(BASE_URI)) {
+                                String testURL = request.getUri().query().get(TEST_URL).orElse(EMPTY_STRING);
+                                String count = request.getUri().query().get(COUNT).orElse(EMPTY_STRING);
                                 if (testURL.isEmpty()) {
-                                    return HttpResponse.create().withEntity(ByteString.fromString("testURL is empty"));
+                                    return HttpResponse.create().withEntity(ByteString.fromString(EMPTY_TEST_URL));
                                 } else if (count.isEmpty()) {
-                                    return HttpResponse.create().withEntity(ByteString.fromString("count is empty"));
+                                    return HttpResponse.create().withEntity(ByteString.fromString(EMPTY_COUNT));
                                 } else {
                                     try {
                                         Integer countInteger = Integer.parseInt(count);
@@ -64,12 +76,13 @@ public class Server {
                                                 .map(pair -> new Pair<>(HttpRequest.create().withUri(pair.first()), pair.second()))
                                                 /*mapAsync, создаем на лету flow из данных запроса, выполняем его и возвращаем*/
                                                 .mapAsync(1, pair -> {
+
                                                     Future<Object> result = Patterns.ask(cacheActor,
-                                                            new GetMessage(testURL, countInteger), 5000);
+                                                            new GetMessage(testURL, countInteger), REQUEST_ACTOR_TIMEOUT);
 
                                                     int answer = (int) Await.result(result, Duration.create(10, TimeUnit.SECONDS));
-                                                    if (answer != -1) {
-                                                        System.out.println("Answer from cache: ");
+                                                    if (answer != NO_ANSWER_MSG) {
+                                                        System.out.println("Answer will get from cache");
                                                         return CompletableFuture.completedFuture(answer);
                                                     }
 
@@ -104,8 +117,9 @@ public class Server {
                                                                     .toMat(fold, Keep.right()), Keep.right()).run(materializer);
 
                                                 }).map(sum -> {
-                                                    Patterns.ask(cacheActor, new StoreMessage(testURL, countInteger, sum.toString()), 5000);
+                                                    Patterns.ask(cacheActor, new StoreMessage(testURL, countInteger, sum.toString()), REQUEST_ACTOR_TIMEOUT);
                                                     Double middleValue = (double) sum / (double) countInteger;
+                                                    System.out.println("Middle response value is " + middleValue.toString() + " ms");
                                                     return HttpResponse.create().withEntity(ByteString.fromString("middle response value is " + middleValue.toString() + " ms"));
                                                 });
 
@@ -116,9 +130,9 @@ public class Server {
                                     }
                                 }
                             } else {
-                                return HttpResponse.create().withEntity(ByteString.fromString("404"));
+                                return HttpResponse.create().withEntity(ByteString.fromString(ERROR_404));
                             }
-                        }, ConnectHttp.toHost("localhost", 8083), materializer);
+                        }, ConnectHttp.toHost(HOST, PORT), materializer);
 
         System.out.println("Server online at http://localhost:8083/\nPress RETURN to stop...");
         System.in.read();
